@@ -7,19 +7,185 @@ output:
 
 
 ## Loading and preprocessing the data
+The repository containing zip data file was cloned from github.
+```{r}
+# unzipping the activity.zip file 
 
+if(!file.exists('activity.csv')){
+  unzip('activity.zip')
+  file.remove('activity.zip')
+}
+
+```
+```{r results='hide'}
+library(dplyr)
+library(ggplot2)
+```
+
+After checking the contents, date column was converted to date class.
+```{r}
+activity_raw <- read.csv('activity.csv',header = TRUE,na.strings = 'NA')
+
+head(activity_raw)
+str(activity_raw)
+dim(activity_raw)
+summary(activity_raw)
+
+#converting date column to date data type
+class(activity_raw$date)
+activity_raw$date <- as.Date(activity_raw$date, format = '%Y-%m-%d')
+
+```
 
 
 ## What is mean total number of steps taken per day?
+finding distinct dates in the dataset.
+```{r}
+# finding number of distinct dates
+length(unique(activity_raw$date))
 
+```
 
+Plotting the histogram and calculating the average number of steps 
+```{r}
+steps_per_day <- activity_raw %>% group_by(date) %>% 
+  summarise(steps_per_day = sum(steps))
+
+hist(steps_per_day$steps_per_day, main = 'Histogram of steps taken each day',
+     xlab = 'steps per day', ylim = c(0,30), breaks = 6 )
+
+```
+```{r}
+mean_steps <- mean(steps_per_day$steps_per_day, na.rm = TRUE)
+median_steps <- median(steps_per_day$steps_per_day,  na.rm = TRUE)
+
+mean_steps
+median_steps
+```
+mean of the total number of steps taken per day is `r mean_steps`
+median of the total number of steps taken per day is `r median_steps`
 
 ## What is the average daily activity pattern?
 
+Grouping the data by inteval.
+```{r}
+average <- activity_raw %>% group_by(interval) %>% 
+  summarise(average_steps = mean(steps, na.rm = TRUE))
+
+average
+
+```
+
+
+```{r}
+# time series plot 
+ggplot(data = average, aes(x = interval, y = average_steps)) + geom_line() +
+  ylab('Average steps') + labs(title = 'average steps per interval')
+```
+
+```{r}
+#Which 5-minute interval, on average across all the days in the dataset, contains 
+#the maximum number of steps?
+
+maxINTERVAL <- average[which.max(average$average_steps),]$interval
+
+maxINTERVAL
+```
 
 
 ## Imputing missing values
+```{r}
+#Calculate and report the total number of missing values in the dataset
+# (i.e. the total number of rows with NAs)
+
+NA_data <- activity_raw[is.na(activity_raw$steps),] 
+number_of_NA <- length(NA_data$steps)
+
+number_of_NA
+
+```
+
+total number of missing rows is `r number_of_NA`
+
+```{r}
+# The strategy for filling NA
+
+new_data <- activity_raw
+
+for (i in 1:nrow(new_data)){
+  if(is.na(new_data[i,'steps'])){
+    new_data[i,'steps'] <- average[which(average$interval==new_data[i,'interval']),'average_steps']
+    
+  }
+}
+
+head(new_data)
+
+```
+ 
+plotting the histogram
+```{r}
+steps_wo_na <- new_data %>% group_by(date) %>% 
+  summarise(sum_steps = sum(steps))
+
+hist(steps_wo_na$sum_steps, main = 'Histogram of steps taken each day after filling NAs',
+     xlab = 'steps per day', ylim = c(0,18), breaks = seq(0,23000,1000) )
+
+```
 
 
+```{r}
+mean_steps_new <- mean(steps_wo_na$sum_steps, na.rm = TRUE)
+median_steps_new <- median(steps_wo_na$sum_steps, na.rm = TRUE)
+
+mean_steps_new
+median_steps_new
+```
+* The new mean of the total number of steps taken per day is `r mean_steps_new`
+* The new median of the total number of steps taken per day is `r median_steps_new`
+
+### What is the impact of imputing missing data on the estimates of the total daily number of steps?
+The mean of number of steps has not increased. But there is a slight increase in median which is expected.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+#creating weekday fun
+weekday_type <- function(date) {
+  day <- weekdays(date)
+  if (day %in% c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday"))
+    return("weekday")
+  else 
+    return("weekend")
+}
+
+new_data$date <- as.Date(new_data$date)
+
+# creating factor variable
+new_data$factor <- sapply(new_data$date, weekday_type)
+```
+
+subsetting by the weekday factor
+```{r}
+#calculating average steps per day for weekday and weekend
+data_weekday <- new_data %>% filter(factor=='weekday') 
+data_weekend <- new_data %>% filter(factor=='weekend') 
+
+
+weekday_avg <- data_weekday %>% group_by(interval) %>% summarise(average = mean(steps))
+weekend_avg <- data_weekend %>% group_by(interval) %>% summarise(average = mean(steps))
+
+```
+
+```{r}
+# plotting time series
+par(mfrow=c(2,1), mar=c(4,4,2,1))
+
+plot(average~interval, data=weekday_avg, type="l",
+       main="Avg steps for Weekdays", xlab="Time Interval", col="red")
+plot(average~interval, data=weekend_avg, type="l",
+       main="Avg steps for Weekends", xlab="Time Interval", col="red")
+
+```
+
+
+
